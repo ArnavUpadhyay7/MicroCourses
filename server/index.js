@@ -6,34 +6,41 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 
 const app = express();
-// CRITICAL FIX 1: Use Render's assigned port via process.env.PORT
 const PORT = process.env.PORT || 5000;
-// CRITICAL FIX 2: Always use the secure MONGO_URI from the environment variables
 const MONGO_URI = process.env.MONGO_URI; 
-// CRITICAL FIX 3: Get the CLIENT_URL for production CORS configuration
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5174'; 
+// CRITICAL FIX: Ensure CLIENT_URL does not have a trailing slash for clean comparison
+const CLIENT_URL = (process.env.CLIENT_URL || 'http://localhost:5174').replace(/\/$/, ''); 
 
 
 // --- 1. Middleware Setup ---
 
-// CRITICAL FIX 4: Dynamically configure CORS origin based on CLIENT_URL
-// This is essential for requests from your live Render frontend.
+// CRITICAL FIX: Simplify and robustify the allowed origins list
 const allowedOrigins = [
+    // Local development origins
     'http://localhost:3000', 
     'http://localhost:5173', 
     'http://localhost:5174',
+    // Production origin (Cleaned of trailing slash)
     CLIENT_URL 
 ];
 
 app.use(cors({
     origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps or local requests)
+        // Allow requests with no origin (e.g., Postman, server-to-server)
         if (!origin) return callback(null, true);
-        if (allowedOrigins.indexOf(origin) === -1) {
-            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-            return callback(new Error(msg), false);
+        
+        // Use a simple indexOf check against the cleaned list
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            return callback(null, true);
         }
-        return callback(null, true);
+        
+        // Check if the production URL matches exactly
+        if (origin === CLIENT_URL) {
+            return callback(null, true);
+        }
+        
+        const msg = `CORS blocked access from Origin: ${origin}`;
+        return callback(new Error(msg), false);
     },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true
@@ -46,7 +53,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // --- 2. Database Connection ---
 if (!MONGO_URI) {
     console.error("FATAL ERROR: MONGO_URI is not defined.");
-    process.exit(1); // Crash the app
+    process.exit(1);
 }
 
 mongoose.connect(MONGO_URI)
@@ -56,10 +63,13 @@ mongoose.connect(MONGO_URI)
         process.exit(1); 
     });
 
+
 // Basic health check route
 app.get('/', (req, res) => {
     res.status(200).send({ message: 'MicroCourses API is running!', environment: process.env.NODE_ENV || 'development' });
 });
+
+// --- 3. Routes ---
 
 // ** A. Authentication Routes **
 app.use('/api/auth', require('./routes/auth'));
@@ -73,6 +83,8 @@ app.use('/api/admin', require('./routes/admin'));
 // ** D. Learner/Course Routes (Enroll, Progress, Browse) **
 app.use('/api/courses', require('./routes/courses'));
 
+
+// --- 4. Transcript Generation Routes ---
 
 const transcriptService = require('./services/transcriptService'); 
 
@@ -116,6 +128,7 @@ app.post('/api/webhooks/transcript-receive', async (req, res) => {
 });
 
 
+// --- 5. Start the Server ---
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
     console.log('Environment:', process.env.NODE_ENV || 'development');
