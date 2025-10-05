@@ -6,42 +6,31 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 
 const app = express();
+// CRITICAL FIX 1: Use Render's assigned port via process.env.PORT
 const PORT = process.env.PORT || 5000;
+// CRITICAL FIX 2: Always use the secure MONGO_URI from the environment variables
 const MONGO_URI = process.env.MONGO_URI; 
-// CRITICAL FIX: Ensure CLIENT_URL does not have a trailing slash for clean comparison
+// CRITICAL FIX 3: Get the CLIENT_URL and ensure no trailing slash for the origin list
 const CLIENT_URL = (process.env.CLIENT_URL || 'http://localhost:5174').replace(/\/$/, ''); 
 
 
 // --- 1. Middleware Setup ---
 
-// CRITICAL FIX: Simplify and robustify the allowed origins list
-const allowedOrigins = [
+// CRITICAL FIX 4: Use an array of trusted origins for the CORS middleware.
+// This is more declarative and less prone to custom function errors.
+const TRUSTED_ORIGINS = [
     // Local development origins
     'http://localhost:3000', 
     'http://localhost:5173', 
     'http://localhost:5174',
-    // Production origin (Cleaned of trailing slash)
+    // Production origin (from Render environment variable)
     CLIENT_URL 
 ];
 
+// Reverting to the simpler, standard CORS configuration using the origins array.
+// The library handles the logic efficiently, reducing bugs in custom checks.
 app.use(cors({
-    origin: (origin, callback) => {
-        // Allow requests with no origin (e.g., Postman, server-to-server)
-        if (!origin) return callback(null, true);
-        
-        // Use a simple indexOf check against the cleaned list
-        if (allowedOrigins.indexOf(origin) !== -1) {
-            return callback(null, true);
-        }
-        
-        // Check if the production URL matches exactly
-        if (origin === CLIENT_URL) {
-            return callback(null, true);
-        }
-        
-        const msg = `CORS blocked access from Origin: ${origin}`;
-        return callback(new Error(msg), false);
-    },
+    origin: TRUSTED_ORIGINS,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true
 }));
@@ -53,7 +42,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // --- 2. Database Connection ---
 if (!MONGO_URI) {
     console.error("FATAL ERROR: MONGO_URI is not defined.");
-    process.exit(1);
+    process.exit(1); 
 }
 
 mongoose.connect(MONGO_URI)
