@@ -28,7 +28,6 @@ const TRUSTED_ORIGINS = [
 ];
 
 // Reverting to the simpler, standard CORS configuration using the origins array.
-// The library handles the logic efficiently, reducing bugs in custom checks.
 app.use(cors({
     origin: TRUSTED_ORIGINS,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
